@@ -9,17 +9,21 @@ TASK_STATUS_COMPLETED = "completed"
 TASK_STATUS_FAILED = "failed"
 
 MAX_FAILURES_ALLOWED = 3
+STALE_TIMEOUT_SECONDS = 21
+
 
 
 class Task(BaseModel):
     task_id: int
     task_type: str
     details:dict[str, Any]
+    update_details: Optional[dict[str, Any]]
 
 class NewTask(BaseModel):
     task_type: str
     details: dict[str, Any]
     status: str
+    uuid: str
 
 
 class TaskUpdate(BaseModel):
@@ -38,6 +42,3 @@ class TaskInfo(BaseModel):
     update_details: Optional[dict[str, Any]] = None
     fail_count: Optional[int] = 0
 
-
-def TASK_STATUS_FAILED():
-    return None

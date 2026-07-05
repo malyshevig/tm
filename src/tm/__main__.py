@@ -1,7 +1,8 @@
 import json
+import logging
 from typing import Optional, Any
 
-from fastapi import FastAPI, Form
+from fastapi import FastAPI, Form, Header, Depends
 import uvicorn
 from starlette.responses import JSONResponse
 
@@ -10,8 +11,36 @@ from tm import errors, model
 from tm.errors import TaskException
 from tm.model import NewTask, TaskInfo, Task
 
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d] %(message)s")
+logger = logging.getLogger(__name__)
+
 app = FastAPI()
 task_manager = TaskManager()
+
+
+async def get_idempotency_key(
+        idempotency_key: str = Header(
+            default=None,
+            alias="Idempotency-Key",
+            json_schema_extra={
+                "format": "uuid",
+                "example": "550e8400-e29b-41d4-a716-446655440000"
+            },
+            description="Уникальный ключ для обеспечения идемпотентности запроса (UUID v4). "
+                        "Используется для предотвращения дублирования операций при повторных запросах.",
+            examples=["550e8400-e29b-41d4-a716-446655440000"]
+        )
+) -> Optional[str]:
+    """Извлекает и валидирует Idempotency-Key из заголовка"""
+    if idempotency_key is None:
+        return None
+
+    return idempotency_key
+
+
+
+
 
 @app.get("/tm/api/v1/heartbeat")
 async def hb(agent_id: str):
@@ -42,7 +71,7 @@ async def assign(worker_id: str, task_type:str):
                 "body": "No tasks to perform"
             },
         )
-    return Task(task_id=task.task_id, details=task.details, task_type=task.task_type)
+    return Task(task_id=task.task_id, details=task.details, task_type=task.task_type, update_details=task.update_details)
 
 
 def return_code_on_error (err: TaskException):
@@ -99,6 +128,8 @@ async def accept(worker_id: str, task_id:int):
 @app.post("/tm/api/v1/worker/{worker_id}/task/{task_id}/update")
 async def update(worker_id: str, task_id:int, details: str=Form(...)):
     try:
+        if details is None:
+            details = "{}"
         task_manager.update(worker_id, task_id,  details=json.loads(details))
         return JSONResponse(
             status_code=200,
@@ -138,9 +169,18 @@ async def completed(worker_id: str, task_id:int, details: str=Form(...)):
 
 
 @app.post("/tm/api/v1/tm/task")
-async def create_task(task_type:str=Form(...), details: str=Form(...)):
-    new_task_info = task_manager.create(NewTask(task_type=task_type, details=json.loads(details),status=model.TASK_STATUS_IDLE))
-    return new_task_info
+async def create_task(task_type:str=Form(...), details: str=Form(...),  idempotency_key: str = Depends(get_idempotency_key)):
+    if isinstance(details, str):
+        details = json.loads(details)
+
+    try:
+        new_task_info = task_manager.create(NewTask(task_type=task_type, details=details,
+                                                status=model.TASK_STATUS_IDLE, uuid=idempotency_key))
+        return new_task_info
+    except errors.TaskNAlreadyExists as ex:
+        logger.info(ex.msg)
+        return ex.task
+
 
 @app.get("/tm/api/v1/tm/task")
 async def tasks( limit: Optional[int] = 20, offset: Optional[int] = 0):

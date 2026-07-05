@@ -1,8 +1,17 @@
+from tm import model
 
 
 class TaskException(Exception):
     def __init__(self, msg:str):
         self.msg=msg
+
+class TaskNAlreadyExists(TaskException):
+    def __init__(self,  uuid: str, task:model.TaskInfo, msg=None):
+        self.uuid = uuid
+        self.task = task
+        msg = msg if msg else f"task with uuid {uuid} already exists, idempotency violated"
+        super().__init__(msg)
+
 
 
 class TaskNotFound(TaskException):

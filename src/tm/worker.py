@@ -2,6 +2,7 @@ import json
 import logging
 import threading
 import time
+import uuid
 from contextlib import contextmanager
 
 import requests
@@ -66,11 +67,6 @@ class Worker():
         logger.info(f"update task {task}")
 
         try:
-            def _build_update_payload() -> dict:
-                return {
-                    "details": "{\"status\": 1}",
-                }
-
             url = f"{self.server}/tm/api/v1/worker/{self.worker_id}/task/{task.task_id}/update"
             payload = self._build_update_payload(task.update_details)
             response = self.session.request(method="POST", data=payload, url=url, timeout=self.timeout)
@@ -156,6 +152,21 @@ class Worker():
             stop_event.set()  # Сигнализируем потоку остановиться
             if thread is not None:
                 thread.join(timeout=self.poll_period)
+
+
+    def create_task (self, task_type: str, details: dict):
+        url =  f"{self.server}/tm/api/v1/tm/task"
+        payload = self._build_update_payload(details)
+        payload["task_type"] = task_type
+        idempotency_key = str(uuid.uuid4())
+
+        headers = {
+            "Idempotency-Key": idempotency_key
+        }
+
+        response = self.session.request(method="POST", url=url, data=payload, headers=headers, timeout=self.timeout)
+        response.raise_for_status()
+
 
 
 def main():

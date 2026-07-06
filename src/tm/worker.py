@@ -11,8 +11,6 @@ from urllib3 import Retry
 
 from tm import model
 
-
-
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d] %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -38,8 +36,8 @@ class Worker():
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
 
-    def request_assign (self):
-        url =  f"{self.server}/tm/api/v1/worker/{self.worker_id}/{self.task_type}/assign"
+    def request_assign(self):
+        url = f"{self.server}/tm/api/v1/worker/{self.worker_id}/{self.task_type}/assign"
         response = self.session.request(method="POST", url=url, timeout=self.timeout)
         if response.status_code == 404:
             return None
@@ -78,7 +76,6 @@ class Worker():
             logger.exception(f"Unexpected error processing task {task.task_id}: {e}")
             raise e
 
-
     def request_complete(self, task: model.Task):
 
         payload = self._build_update_payload(task.update_details)
@@ -94,7 +91,7 @@ class Worker():
         response = self.session.request(method="POST", url=url, data=payload, timeout=self.timeout)
         response.raise_for_status()
 
-    def get_task (self):
+    def get_task(self):
         try:
             task = self.request_assign()
             if task:
@@ -102,27 +99,32 @@ class Worker():
                 if task:
                     return task
             else:
-                    return None
+                return None
 
         except Exception as e:
             logger.error(e)
             raise e
 
-    def get_task_cycle (self):
-              while True:
-                task = self.get_task()
-                if task is not None:
-                    return task
-                time.sleep(self.poll_period)
-
+    def get_task_cycle(self, return_on_none=False):
+        while True:
+            task = self.get_task()
+            if task is not None:
+                return task
+            else:
+                if return_on_none:
+                    return None
+            time.sleep(self.poll_period)
 
     @contextmanager
-    def take_task(self):
+    def take_task(self, return_on_none=False):
         task: model.Task = None
         thread: threading.Thread = None
 
         stop_event = threading.Event()
-        task = (self.get_task_cycle())
+        task = self.get_task_cycle(return_on_none)
+        if task is None:
+            yield None
+
         logger.info(f"worker process task {task}")
 
         try:
@@ -153,9 +155,8 @@ class Worker():
             if thread is not None:
                 thread.join(timeout=self.poll_period)
 
-
-    def create_task (self, task_type: str, details: dict):
-        url =  f"{self.server}/tm/api/v1/tm/task"
+    def create_task(self, task_type: str, details: dict):
+        url = f"{self.server}/tm/api/v1/tm/task"
         payload = self._build_update_payload(details)
         payload["task_type"] = task_type
         idempotency_key = str(uuid.uuid4())
@@ -168,18 +169,17 @@ class Worker():
         response.raise_for_status()
 
 
-
 def main():
     worker = Worker(worker_id=1, task_type="docling")
     while True:
         with worker.take_task() as task:
             logger.info(f"worker process task {task.details}")
             for i in range(10):
-                task.update_details = {"updated": f"{i*100/10} %" }
+                task.update_details = {"updated": f"{i * 100 / 10} %"}
                 time.sleep(5)
 
-            task.update_details = {"updated": f"{100} %" }
+            task.update_details = {"updated": f"{100} %"}
 
 
 if __name__ == "__main__":
-        main()
+    main()

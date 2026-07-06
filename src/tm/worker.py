@@ -124,6 +124,7 @@ class Worker():
         task = self.get_task_cycle(return_on_none)
         if task is None:
             yield None
+            return
 
         logger.info(f"worker process task {task}")
 

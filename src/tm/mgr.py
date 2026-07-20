@@ -190,10 +190,8 @@ class TaskManager:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 sql = """
                         WITH next_task AS (
-                            SELECT task_id
-                            FROM tasks
-                            WHERE status = 'idle' and task_type = %(task_type)s
-                            ORDER BY created_dt ASC
+                            chatchatposytpo
+                            poss
                             LIMIT 1
                             FOR UPDATE SKIP LOCKED
                         )
@@ -226,7 +224,7 @@ class TaskManager:
                             FROM tasks
                             WHERE task_id = %s
                             FOR UPDATE
-                        """
+                """
             cursor.execute(sql, (task_id,))
             row = cursor.fetchone()
 
@@ -271,14 +269,13 @@ class TaskManager:
         except TaskException as e:
             raise e
 
-
     def _update(self, worker_id, task_id:int, details:dict[str, Any],
                 new_status: str= None, increase_fail_count: bool=False):
 
         try:
             with get_client() as conn:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                    self.assert_task_status(cursor, task_id, worker_id, model.TASK_STATUS_IN_PROGRESS)
+                    #self.assert_task_status(cursor, task_id, worker_id, model.TASK_STATUS_IN_PROGRESS)
 
                     sql = """UPDATE tasks
                             SET update_details = %(details)s,
@@ -291,10 +288,13 @@ class TaskManager:
 
                     sql += """WHERE
                             task_id = %(task_id)s
+                            and worker_id = %(worker_id)s
+                            and status = %(status)s
                             """
 
                     details = psycopg2.extras.Json(details)
-                    params = {'task_id': task_id, 'details': details, "new_status": new_status}
+                    params = {'task_id': task_id, 'details': details, "new_status": new_status,
+                              'worker_id': worker_id, 'status': model.TASK_STATUS_IN_PROGRESS}
 
                     cursor.execute(sql, params)
                     conn.commit()
@@ -363,7 +363,8 @@ class TaskManager:
                                 audit_updated_dt = now(),
                                 audit_id = %(audit_id)s
                             WHERE
-                                status in (%(status_assigned)s, %(status_in_progress)s) and fail_count <= %(max_fail_count)s
+                                status in (%(status_assigned)s, %(status_in_progress)s) 
+                                and fail_count <= %(max_fail_count)s
                                 and updated_dt < (now() - make_interval(secs => %(stale_timeout_seconds)s)) 
                             """
                     params = {'new_status': model.TASK_STATUS_IDLE,

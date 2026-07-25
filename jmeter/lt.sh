@@ -9,8 +9,8 @@ $JMETER -n \
   -t ./lt1.jmx \
   -l ./results/test_$(date +%Y%m%d_%H%M%S).jtl \
   -e -o ./reports/test_$(date +%Y%m%d_%H%M%S) \
-  -Jtasks=500000 \
-  -Jworkers=5000 \
+  -Jtasks=100 \
+  -Jworkers=10000 \
   -Jcycles=100 \
   -Jhost=localhost \
   -Jport=81 \

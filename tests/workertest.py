@@ -1,8 +1,6 @@
 import unittest
 
-from tm import Worker
-from tm.mgr import TaskManager
-from tm.model import NewTask
+from tm.tm import Worker
 
 
 class WorkerTest(unittest.TestCase):

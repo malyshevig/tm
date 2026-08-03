@@ -1,4 +1,4 @@
-from tm import model
+from .model import TaskInfo
 
 
 class TaskException(Exception):
@@ -6,7 +6,7 @@ class TaskException(Exception):
         self.msg=msg
 
 class TaskNAlreadyExists(TaskException):
-    def __init__(self,  uuid: str, task:model.TaskInfo, msg=None):
+    def __init__(self, uuid: str, task: TaskInfo, msg=None):
         self.uuid = uuid
         self.task = task
         msg = msg if msg else f"task with uuid {uuid} already exists, idempotency violated"

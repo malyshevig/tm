@@ -1,7 +1,7 @@
 import unittest
 
-from tm.mgr import TaskManager
-from tm.model import NewTask
+from tm.tm import TaskManager
+from tm.tm.model import NewTask
 
 
 class TestStringMethods(unittest.TestCase):

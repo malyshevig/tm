@@ -1,16 +1,14 @@
 import json
 import logging
-from typing import Optional, Any
+from typing import Optional
 
 from fastapi import FastAPI, Form, Header, Depends
 import uvicorn
 from starlette.responses import JSONResponse
 
-from src.tm.mgr import TaskManager
-from tm import errors, model
-from tm.errors import TaskException
-from tm.model import NewTask, TaskInfo, Task
-
+from .mgr import TaskManager
+from .errors import *
+from .model import NewTask, TaskInfo, Task, TASK_STATUS_IDLE
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d] %(message)s")
 logger = logging.getLogger(__name__)
@@ -38,10 +36,6 @@ async def get_idempotency_key(
 
     return idempotency_key
 
-
-
-
-
 @app.get("/tm/api/v1/heartbeat")
 async def hb(agent_id: str):
     return JSONResponse(
@@ -51,8 +45,7 @@ async def hb(agent_id: str):
         },
     )
 
-
-@app.get("/tm/api/v1/heartbeat")
+@app.get("/health")
 async def hb():
     return JSONResponse(
         status_code=200,
@@ -73,30 +66,29 @@ async def assign(worker_id: str, task_type:str):
         )
     return Task(task_id=task.task_id, details=task.details, task_type=task.task_type, update_details=task.update_details)
 
-
 def return_code_on_error (err: TaskException):
-    if isinstance(err, errors.TaskNotFound):
+    if isinstance(err, TaskNotFound):
         return JSONResponse(
             status_code=404,
             content={
                 "body": err.msg
             },
         )
-    if isinstance(err,errors.IncorrectTaskStatusForOperation):
+    if isinstance(err, IncorrectTaskStatusForOperation):
         return JSONResponse(
             status_code=406,
             content={
                 "body": err.msg
             },
         )
-    if isinstance(err, errors.IncorrectWorkerId):
+    if isinstance(err, IncorrectWorkerId):
         return JSONResponse(
             status_code=401,
             content={
                 "body": err.msg
             },
         )
-    if isinstance(err, errors.DatabaseException):
+    if isinstance(err, DatabaseException):
         return JSONResponse(
             status_code=503,
             content={
@@ -122,7 +114,7 @@ async def accept(worker_id: str, task_id:int):
             },
         )
 
-    except errors.TaskException as e:
+    except TaskException as e:
         return return_code_on_error(e)
 
 @app.post("/tm/api/v1/worker/{worker_id}/task/{task_id}/update")
@@ -175,9 +167,9 @@ async def create_task(task_type:str=Form(...), details: str=Form(...),  idempote
 
     try:
         new_task_info = task_manager.create(NewTask(task_type=task_type, details=details,
-                                                status=model.TASK_STATUS_IDLE, uuid=idempotency_key))
+                                                    status= TASK_STATUS_IDLE, uuid=idempotency_key))
         return new_task_info
-    except errors.TaskNAlreadyExists as ex:
+    except TaskNAlreadyExists as ex:
         logger.info(ex.msg)
         return ex.task
 
@@ -200,14 +192,22 @@ if __name__ == "__main__":
     # Опциональный аргумент с коротким (-o) и длинным (--output) именем
     parser.add_argument(
         "-p", "--port",
-        default=8200,
+        default=8000,
         help="Port (by default: 8200)"
     )
+
+    parser.add_argument(
+        "-w", "--workers",
+        default=4,
+        help="Number of workers (by default: 4)"
+    )
+
 
     # Аргумент с ограниченным списком возможных значений (choices)
 
     # 3. Парсим аргументы из командной строки
     args = parser.parse_args()
     port = int(args.port)
+    workers = int(args.workers)
 
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=port, workers=workers)

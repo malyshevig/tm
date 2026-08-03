@@ -1,7 +1,7 @@
 import logging
 import time
 
-from tm.mgr import TaskManager
+from .mgr import TaskManager
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d] %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -12,13 +12,11 @@ class Audit:
 
 
     def run(self):
-
         task_manager = TaskManager()
         while True:
             row_count= task_manager.audit(self.id)
             logger.info(f"Audit id: {self.id} , updated:{row_count}")
             time.sleep(10)
-
 
 
 if __name__ == "__main__":

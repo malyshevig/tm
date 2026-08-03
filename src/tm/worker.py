@@ -9,7 +9,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3 import Retry
 
-from tm import model
+from .model import *
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d] %(message)s")
 logger = logging.getLogger(__name__)
@@ -44,9 +44,9 @@ class Worker():
 
         response.raise_for_status()
 
-        return model.Task(**response.json())
+        return Task(**response.json())
 
-    def request_accept(self, task: model.Task):
+    def request_accept(self, task: Task):
         url = f"{self.server}/tm/api/v1/worker/{self.worker_id}/task/{task.task_id}/accept"
         response = self.session.request(method="POST", url=url, timeout=self.timeout)
         response.raise_for_status()
@@ -61,7 +61,7 @@ class Worker():
             "details": json.dumps(update_details),
         }
 
-    def request_update(self, task: model.Task):
+    def request_update(self, task: Task):
         logger.info(f"update task {task}")
 
         try:
@@ -76,7 +76,7 @@ class Worker():
             logger.exception(f"Unexpected error processing task {task.task_id}: {e}")
             raise e
 
-    def request_complete(self, task: model.Task):
+    def request_complete(self, task: Task):
 
         payload = self._build_update_payload(task.update_details)
 
@@ -84,7 +84,7 @@ class Worker():
         response = self.session.request(method="POST", url=url, data=payload, timeout=self.timeout)
         response.raise_for_status()
 
-    def request_failed(self, task: model.Task):
+    def request_failed(self, task: Task):
         payload = self._build_update_payload(task.update_details)
 
         url = f"{self.server}/tm/api/v1/worker/{self.worker_id}/task/{task.task_id}/failed"
@@ -117,7 +117,7 @@ class Worker():
 
     @contextmanager
     def take_task(self, return_on_none=False):
-        task: model.Task = None
+        task: Task = None
         thread: threading.Thread = None
 
         stop_event = threading.Event()

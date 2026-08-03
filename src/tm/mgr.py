@@ -1,26 +1,33 @@
 import logging
-from ast import dump
+import os
 from contextlib import contextmanager
-from typing import Callable, Any
+from typing import Any
 
 import psycopg2
 import psycopg2.pool as pool
 import psycopg2.extras
 
-from tm import model, errors
-from tm.errors import TaskNotFound, IncorrectWorkerId, IncorrectTaskStatusForOperation, DatabaseException, TaskException
+
+from .errors import TaskNotFound, IncorrectWorkerId, IncorrectTaskStatusForOperation, DatabaseException, TaskException, \
+    TaskNAlreadyExists
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d] %(message)s")
 logger = logging.getLogger(__name__)
 
-from tm.model import TaskInfo, NewTask, Task
+from .model import TaskInfo, NewTask, TASK_STATUS_ASSIGNED, TASK_STATUS_IN_PROGRESS, TASK_STATUS_FAILED, \
+    MAX_FAILURES_ALLOWED, STALE_TIMEOUT_SECONDS, TASK_STATUS_COMPLETED, TASK_STATUS_IDLE
 
-_pool = pool.ThreadedConnectionPool(1, 20, user="tm",
-                                    password="begemot",
-                                    host="gek",
-                                    port="5432",
-                                    database="tm")
+db_user = os.getenv("DB_USER")
+db_password = os.getenv("DB_PASSWORD")
+db_name = os.getenv("DB_NAME")
+db_port = os.getenv("DB_PORT")
+db_host = os.getenv("DB_HOST")
 
+_pool = pool.ThreadedConnectionPool(1, 20, user=db_user,
+                                    password=db_password,
+                                    host=db_host,
+                                    port=db_port,
+                                    database=db_name)
 
 @contextmanager
 def get_client():
@@ -76,7 +83,7 @@ class TaskManager:
                         WHERE worker_id = %(worker_id)s 
                         and status = %(status)s
                     """
-                    params = {'worker_id': worker_id, 'status': model.TASK_STATUS_ASSIGNED}
+                    params = {'worker_id': worker_id, 'status': TASK_STATUS_ASSIGNED}
                     cursor.execute(sql, params)
                     row = cursor.fetchone()
 
@@ -152,7 +159,7 @@ class TaskManager:
                     return new_task
             except psycopg2.errors.UniqueViolation as ex:
                 original_task = self.get_task_by_uuid(task.uuid)
-                raise errors.TaskNAlreadyExists(task.uuid, original_task)
+                raise TaskNAlreadyExists(task.uuid, original_task)
             except psycopg2.Error as e:
                 logger.error(e)
                 raise e
@@ -190,8 +197,10 @@ class TaskManager:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                 sql = """
                         WITH next_task AS (
-                            chatchatposytpo
-                            poss
+                            SELECT task_id
+                            FROM tasks
+                            WHERE status = 'idle' and task_type = %(task_type)s
+                            ORDER BY created_dt ASC
                             LIMIT 1
                             FOR UPDATE SKIP LOCKED
                         )
@@ -204,7 +213,7 @@ class TaskManager:
                                   details, status, worker_id, update_details, fail_count
                     """
                 cursor.execute(sql, {'worker_id': worker_id, 'task_type': task_type,
-                                     'new_status': model.TASK_STATUS_ASSIGNED})
+                                     'new_status': TASK_STATUS_ASSIGNED})
                 row = cursor.fetchone()
 
                 if row:
@@ -252,7 +261,7 @@ class TaskManager:
             with get_client() as conn:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                     # Assert inside transaction
-                    self.assert_task_status(cursor, task_id, worker_id, model.TASK_STATUS_ASSIGNED)
+                    self.assert_task_status(cursor, task_id, worker_id, TASK_STATUS_ASSIGNED)
 
                     sql = """
                         UPDATE tasks
@@ -260,7 +269,7 @@ class TaskManager:
                             updated_dt = now()
                         WHERE task_id = %(task_id)s
                         """
-                    cursor.execute(sql, {'task_id': task_id, 'status': model.TASK_STATUS_IN_PROGRESS})
+                    cursor.execute(sql, {'task_id': task_id, 'status': TASK_STATUS_IN_PROGRESS})
                     conn.commit()
                     return cursor.rowcount > 0
         except psycopg2.Error as e:
@@ -294,7 +303,7 @@ class TaskManager:
 
                     details = psycopg2.extras.Json(details)
                     params = {'task_id': task_id, 'details': details, "new_status": new_status,
-                              'worker_id': worker_id, 'status': model.TASK_STATUS_IN_PROGRESS}
+                              'worker_id': worker_id, 'status': TASK_STATUS_IN_PROGRESS}
 
                     cursor.execute(sql, params)
                     conn.commit()
@@ -313,18 +322,18 @@ class TaskManager:
     def complete(self, worker_id:str, task_id:int, details:str):
         logger.info(f"complete task_id= {task_id} worker_id= {worker_id} details = {details}")
 
-        return self._update(worker_id, task_id, details, new_status=model.TASK_STATUS_COMPLETED)
+        return self._update(worker_id, task_id, details, new_status=TASK_STATUS_COMPLETED)
 
     def fail(self, worker_id, task_id:int, details:str):
         try:
             with get_client() as conn:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                    task = self.assert_task_status(cursor, task_id, worker_id, model.TASK_STATUS_IN_PROGRESS)
+                    task = self.assert_task_status(cursor, task_id, worker_id, TASK_STATUS_IN_PROGRESS)
 
                     fail_count = task.fail_count + 1
-                    new_status = model.TASK_STATUS_IDLE
-                    if fail_count > model.MAX_FAILURES_ALLOWED:
-                        new_status = model.TASK_STATUS_FAILED
+                    new_status = TASK_STATUS_IDLE
+                    if fail_count > MAX_FAILURES_ALLOWED:
+                        new_status = TASK_STATUS_FAILED
 
                     sql = """
                             UPDATE tasks
@@ -367,12 +376,12 @@ class TaskManager:
                                 and fail_count <= %(max_fail_count)s
                                 and updated_dt < (now() - make_interval(secs => %(stale_timeout_seconds)s)) 
                             """
-                    params = {'new_status': model.TASK_STATUS_IDLE,
+                    params = {'new_status': TASK_STATUS_IDLE,
                               'audit_id': audit_id,
-                              'status_assigned': model.TASK_STATUS_ASSIGNED,
-                              'status_in_progress': model.TASK_STATUS_IN_PROGRESS,
-                              'max_fail_count': model.MAX_FAILURES_ALLOWED,
-                              'stale_timeout_seconds': model.STALE_TIMEOUT_SECONDS}
+                              'status_assigned': TASK_STATUS_ASSIGNED,
+                              'status_in_progress': TASK_STATUS_IN_PROGRESS,
+                              'max_fail_count': MAX_FAILURES_ALLOWED,
+                              'stale_timeout_seconds': STALE_TIMEOUT_SECONDS}
 
 
                     cursor.execute(sql, params)
@@ -386,12 +395,12 @@ class TaskManager:
                                 status in (%(status_assigned)s, %(status_in_progress)s) and fail_count > %(max_fail_count)s
                                 and updated_dt < (now() - make_interval(secs => %(stale_timeout_seconds)s)) 
                             """
-                    params = {'new_status': model.TASK_STATUS_FAILED,
+                    params = {'new_status': TASK_STATUS_FAILED,
                               'audit_id': audit_id,
-                              'status_assigned': model.TASK_STATUS_ASSIGNED,
-                              'status_in_progress': model.TASK_STATUS_IN_PROGRESS,
-                              'max_fail_count': model.MAX_FAILURES_ALLOWED,
-                              'stale_timeout_seconds': model.STALE_TIMEOUT_SECONDS}
+                              'status_assigned': TASK_STATUS_ASSIGNED,
+                              'status_in_progress': TASK_STATUS_IN_PROGRESS,
+                              'max_fail_count': MAX_FAILURES_ALLOWED,
+                              'stale_timeout_seconds': STALE_TIMEOUT_SECONDS}
 
                     cursor.execute(sql, params)
                     conn.commit()

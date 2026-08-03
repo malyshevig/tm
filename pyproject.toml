@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tm"
-version = "0.1.1"
-requires-python = ">=3.12"
+version = "0.1.2"
+requires-python = ">=3.11"
 description = "Task Manager with PostgreSQL queue and REST API"
 readme = "README.md"
 license = {text = "MIT"}
@@ -18,5 +18,5 @@ dependencies = [
     "urllib3>=2.7.0",
     "uvicorn>=0.49.0",
 ]
-[tool.setuptools.packages.find]
-where = ["src"]
+
+

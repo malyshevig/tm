@@ -8,6 +8,7 @@ import psycopg2.pool as pool
 import psycopg2.extras
 
 
+
 from .errors import TaskNotFound, IncorrectWorkerId, IncorrectTaskStatusForOperation, DatabaseException, TaskException, \
     TaskNAlreadyExists
 
@@ -17,17 +18,14 @@ logger = logging.getLogger(__name__)
 from .model import TaskInfo, NewTask, TASK_STATUS_ASSIGNED, TASK_STATUS_IN_PROGRESS, TASK_STATUS_FAILED, \
     MAX_FAILURES_ALLOWED, STALE_TIMEOUT_SECONDS, TASK_STATUS_COMPLETED, TASK_STATUS_IDLE
 
-db_user = os.getenv("DB_USER")
-db_password = os.getenv("DB_PASSWORD")
-db_name = os.getenv("DB_NAME")
-db_port = os.getenv("DB_PORT")
-db_host = os.getenv("DB_HOST")
+from .config import config
 
-_pool = pool.ThreadedConnectionPool(1, 20, user=db_user,
-                                    password=db_password,
-                                    host=db_host,
-                                    port=db_port,
-                                    database=db_name)
+
+_pool = pool.ThreadedConnectionPool(1, 20, user=config.DB_USER,
+                                    password=config.DB_PASSWORD,
+                                    host=config.DB_HOST,
+                                    port=config.DB_PORT,
+                                    database=config.DB_NAME)
 
 @contextmanager
 def get_client():

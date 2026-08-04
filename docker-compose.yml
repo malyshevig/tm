@@ -1,6 +1,7 @@
 services:
   tm-app:
     build: .
+    env_file: .env
     networks:
       - app-network
     volumes:
@@ -22,6 +23,7 @@ services:
 
   tm-audit-app:
     build: .
+    env_file: .env
     networks:
       - app-network
     volumes:

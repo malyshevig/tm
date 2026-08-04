@@ -1,1 +1,1 @@
-docker compose up --scale tm-app=5 --scale tm-audit-app=3  -d --build
+docker compose --env-file .env up --scale tm-app=5 --scale tm-audit-app=3  -d --build

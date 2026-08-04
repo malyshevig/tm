@@ -8,12 +8,7 @@ services:
       - ./logs:/app/logs
     environment:
       - PYTHONUNBUFFERED=1
-      - DB_HOST=gek
-      - DB_PORT=5432
-      - DB_USER=ilia
-      - DB_PASSWORD=begemot
-      - DB_NAME=tm
-    command: sh -c "uvicorn tm.app:app --host 0.0.0.0 --port 8000 --workers 4 2>&1 | tee /app/logs/app.log"
+    command: sh -c "uvicorn tm.app:app --host 0.0.0.0 --port 8000 --workers 4 2>&1 | tee /app/logs/tm_$$HOSTNAME.log"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -30,12 +25,7 @@ services:
       - ./logs:/app/logs
     environment:
       - PYTHONUNBUFFERED=1
-      - DB_HOST=gek
-      - DB_PORT=5432
-      - DB_USER=ilia
-      - DB_PASSWORD=begemot
-      - DB_NAME=tm
-    command: sh -c "python -m tm.audit -i $$HOSTNAME 2>&1 | tee /app/logs/audit.log"
+    command: sh -c "python -m tm.audit -i $$HOSTNAME 2>&1 | tee /app/logs/audit_$$HOSTNAME.log"
 
     restart: unless-stopped
 

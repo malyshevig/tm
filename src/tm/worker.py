@@ -9,21 +9,21 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3 import Retry
 
+from tm.client import TMClient
 from .model import *
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d] %(message)s")
 logger = logging.getLogger(__name__)
 
 
-class Worker():
-    def __init__(self, worker_id, task_type):
-        self.session = requests.Session()
+class Worker(TMClient):
+    def __init__(self, worker_id, task_type, base_url=None):
+        super().__init__(base_url)
         self.timeout = 10
         self.max_retries = 3
         self.worker_id = worker_id
         self.task_type = task_type
         self.poll_period = 10
-        self.server = "http://localhost:8200"
 
         retry_strategy = Retry(
             total=self.max_retries,
@@ -37,7 +37,7 @@ class Worker():
         self.session.mount("https://", adapter)
 
     def request_assign(self):
-        url = f"{self.server}/tm/api/v1/worker/{self.worker_id}/{self.task_type}/assign"
+        url = f"{self.base_url}/tm/api/v1/worker/{self.worker_id}/{self.task_type}/assign"
         response = self.session.request(method="POST", url=url, timeout=self.timeout)
         if response.status_code == 404:
             return None
@@ -65,7 +65,7 @@ class Worker():
         logger.info(f"update task {task}")
 
         try:
-            url = f"{self.server}/tm/api/v1/worker/{self.worker_id}/task/{task.task_id}/update"
+            url = f"{self.base_url}/tm/api/v1/worker/{self.worker_id}/task/{task.task_id}/update"
             payload = self._build_update_payload(task.update_details)
             response = self.session.request(method="POST", data=payload, url=url, timeout=self.timeout)
             response.raise_for_status()
@@ -77,17 +77,16 @@ class Worker():
             raise e
 
     def request_complete(self, task: Task):
-
         payload = self._build_update_payload(task.update_details)
 
-        url = f"{self.server}/tm/api/v1/worker/{self.worker_id}/task/{task.task_id}/completed"
+        url = f"{self.base_url}/tm/api/v1/worker/{self.worker_id}/task/{task.task_id}/completed"
         response = self.session.request(method="POST", url=url, data=payload, timeout=self.timeout)
         response.raise_for_status()
 
     def request_failed(self, task: Task):
         payload = self._build_update_payload(task.update_details)
 
-        url = f"{self.server}/tm/api/v1/worker/{self.worker_id}/task/{task.task_id}/failed"
+        url = f"{self.base_url}/tm/api/v1/worker/{self.worker_id}/task/{task.task_id}/failed"
         response = self.session.request(method="POST", url=url, data=payload, timeout=self.timeout)
         response.raise_for_status()
 
@@ -127,7 +126,6 @@ class Worker():
             return
 
         logger.info(f"worker process task {task}")
-
         try:
             def _worker():
                 logger.info(f"worker process task {task}")
@@ -155,19 +153,6 @@ class Worker():
             stop_event.set()  # Сигнализируем потоку остановиться
             if thread is not None:
                 thread.join(timeout=self.poll_period)
-
-    def create_task(self, task_type: str, details: dict):
-        url = f"{self.server}/tm/api/v1/tm/task"
-        payload = self._build_update_payload(details)
-        payload["task_type"] = task_type
-        idempotency_key = str(uuid.uuid4())
-
-        headers = {
-            "Idempotency-Key": idempotency_key
-        }
-
-        response = self.session.request(method="POST", url=url, data=payload, headers=headers, timeout=self.timeout)
-        response.raise_for_status()
 
 
 def main():

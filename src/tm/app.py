@@ -6,9 +6,9 @@ from fastapi import FastAPI, Form, Header, Depends
 import uvicorn
 from starlette.responses import JSONResponse
 
-from .mgr import TaskManager
-from .errors import *
-from .model import NewTask, TaskInfo, Task, TASK_STATUS_IDLE
+from tm.mgr import TaskManager
+from tm.errors import *
+from tm.model import NewTask, TaskInfo, Task, TASK_STATUS_IDLE
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d] %(message)s")
 logger = logging.getLogger(__name__)
@@ -179,6 +179,12 @@ async def tasks( limit: Optional[int] = 20, offset: Optional[int] = 0):
 
     task_list = task_manager.get_tasks(limit, offset)
     return task_list
+
+
+@app.get("/tm/api/v1/tm/task/{id}")
+async def get_task(id):
+    task = task_manager.get_task_by_id(id)
+    return task
 
 
 if __name__ == "__main__":

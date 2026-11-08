@@ -8,9 +8,9 @@ services:
       - ./logs:/app/logs
     environment:
       - PYTHONUNBUFFERED=1
-    command: sh -c "uvicorn tm.app:app --host 0.0.0.0 --port 8000 --workers 4 2>&1 | tee /app/logs/tm_$$HOSTNAME.log"
+    command: sh -c "uvicorn tm.app:app --host 0.0.0.0 --port 8001 --workers 4 2>&1 | tee /app/logs/tm_$$HOSTNAME.log"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
       interval: 10s
       timeout: 5s
       retries: 3

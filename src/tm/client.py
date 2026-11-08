@@ -36,12 +36,19 @@ class TMClient():
         }
 
 
-    def create_task (self, task_type: str, details: dict):
+    def create_task (self, task_type: str, details: dict | str):
         session = requests.Session()
 
         url = f"{self.base_url}/tm/api/v1/tm/task"
-        payload = self._build_update_payload(details)
+        if isinstance(details, dict):
+            payload = self._build_update_payload(details)
+        elif isinstance(details, str):
+            payload =  {'details': details}
+        else:
+            raise TypeError
+
         payload["task_type"] = task_type
+
         idempotency_key = str(uuid.uuid4())
 
         headers = {

@@ -47,7 +47,7 @@ class Worker(TMClient):
         return Task(**response.json())
 
     def request_accept(self, task: Task):
-        url = f"{self.server}/tm/api/v1/worker/{self.worker_id}/task/{task.task_id}/accept"
+        url = f"{self.base_url}/tm/api/v1/worker/{self.worker_id}/task/{task.task_id}/accept"
         response = self.session.request(method="POST", url=url, timeout=self.timeout)
         response.raise_for_status()
 
@@ -146,7 +146,8 @@ class Worker(TMClient):
         except requests.exceptions.HTTPError as e:
             logger.error(f"HTTP error for task {task.task_id}: {e.response.text}")
         except Exception as e:
-            logger.error(e)
+
+            logger.exception(e)
             logger.info(f"worker fail task {task}")
             self.request_failed(task)
         finally:

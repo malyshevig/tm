@@ -1,7 +1,8 @@
 
-from .proxy import Flow
+from .proxy import workflow_action,workflow_call
 
 
 __all__ = [
-    "proxy.py",
+    "workflow_action",
+    "workflow_call"
 ]

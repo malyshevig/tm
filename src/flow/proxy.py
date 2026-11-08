@@ -2,6 +2,11 @@ import inspect
 import json
 from functools import wraps
 
+from tm import Worker
+from tm.client import TMClient
+
+base_url = "http://localhost:82"
+tmclient = TMClient(base_url)
 
 def serialize_call(func, bound):
     arguments = {k: v for k, v in bound.arguments.items() if k != 'self'}
@@ -13,20 +18,20 @@ def serialize_call(func, bound):
     })
 
 
-def deserialize_call(json_str: str, target):
+def deserialize_call(details:dict, target):
     """
     Выполняет десериализованный вызов на целевом объекте.
 
     Args:
-        json_str: JSON-строка с описанием вызова
+        details: dict с описанием вызова
         target: объект, на котором нужно вызвать метод
 
     Returns:
         Результат выполнения метода
     """
-    data = json.loads(json_str)
-    method_name = data["method"]
-    arguments = data["arguments"]
+
+    method_name = details["method"]
+    arguments = details["arguments"]
 
     # Получаем метод
     if not hasattr(target, method_name):
@@ -35,25 +40,51 @@ def deserialize_call(json_str: str, target):
     method = getattr(target, method_name)
 
     # Вызываем метод с распакованными аргументами
-    return method( **arguments)
+    return method, arguments
 
 
-def proxy(func):
-    sig = inspect.signature(func)
-    @wraps(func)
-    def wrapper( *args, **kwargs):
-        bound = sig.bind(*args, **kwargs)
-        bound.apply_defaults()
 
-        # Сериализуем только аргументы (без self)
-        serialized = serialize_call(func, bound)
-        print(f"[SERIALIZE] {serialized}")
+def workflow_call(workflow_id):
+    def proxy(func):
+        sig = inspect.signature(func)
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            bound = sig.bind(*args, **kwargs)
+            bound.apply_defaults()
 
-        # 4. Вызываем оригинальную функцию с очищенными аргументами
-        #return func(*bound.args, **bound.kwargs)
+            # Сериализуем только аргументы (без self)
+            serialized = serialize_call(func, bound)
+            print(f"[SERIALIZE] {serialized}")
 
-        return serialized
+            # 4. Вызываем оригинальную функцию с очищенными аргументами
+            #return func(*bound.args, **bound.kwargs)
+            #ask_type = func.__qualname__
+            task_type = f"{workflow_id}.{func.__name__}"
+            tmclient.create_task(task_type, serialized)
+
+            return serialized
+
+        return wrapper
+    return proxy
 
 
-    return wrapper
+def workflow_action(workflow_id):
+    def action(func):
+        @wraps(func)
+        def wrapper(self,  *args, **kwargs):
+#            task_type = func.__qualname__
+            task_type = f"{workflow_id}.{func.__name__}"
 
+
+            worker = Worker(123, task_type, base_url )
+            with worker.take_task() as task:
+                details = task.details
+                method, arguments = deserialize_call(details, self)
+                func(self,**arguments)
+
+            # 4. Вызываем оригинальную функцию с очищенными аргументами
+            #return func(*bound.args, **bound.kwargs)
+
+            return
+        return wrapper
+    return action

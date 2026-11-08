@@ -1,4 +1,8 @@
 from flow.flow import Flow
+from tasks import BookFlowTasks
+
+
+
 
 
 class BookFlow(Flow):
@@ -8,5 +12,10 @@ class BookFlow(Flow):
         super().__init__(worker_id, BookFlow.task_type)
 
     def run(self):
+        taskMgr = BookFlowTasks()
+
         with self.get_task_cycle() as task:
             file_id = task.details["file_id"]
+            isbn_details = taskMgr.get_isbn(file_id)
+            if isbn_details:
+                task.get_
